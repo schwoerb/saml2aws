@@ -46,7 +46,8 @@ The process goes something like this:
   - [Advanced Configuration](#advanced-configuration)
     - [Windows Subsystem Linux (WSL) Configuration](#windows-subsystem-linux-wsl-configuration)
       - [Option 1: Disable Keychain](#option-1-disable-keychain)
-      - [Option 2: Configure Pass to be the default keyring](#option-2-configure-pass-to-be-the-default-keyring)
+      - [Option 2: Use KeePassXC for credential storage](#option-2-use-keepassxc-for-credential-storage)
+      - [Option 3: Configure Pass to be the default keyring](#option-3-configure-pass-to-be-the-default-keyring)
     - [Configuring Multiple Accounts](#configuring-multiple-accounts)
       - [Dev Account Setup](#dev-account-setup)
       - [Test Account Setup](#test-account-setup)
@@ -464,12 +465,47 @@ If you are using WSL1 or WSL2, you might get the following error when attempting
 
 This happens because the preferred keyring back-end - uses the `gnome-keyring` by default - which requires X11 - and if you are not using Windows 11 with support for Linux GUI applications - this can be difficult without [configuring a X11 forward](https://stackoverflow.com/questions/61110603/how-to-set-up-working-x11-forwarding-on-wsl2).
 
-There are 2 preferred approaches to workaround this issue:
+There are 3 preferred approaches to workaround this issue:
 
 #### Option 1: Disable Keychain
 You can apply the  `--disable-keychain` flag when using both the `configure` and `login` commands. Using this flag means that your credentials (such as your password to your IDP, or in the case of Okta the Okta Session Token) will not save to your keychain - and be skipped entierly. This means you will be required to enter your username and password each time you invoke the `login` command.
 
-#### Option 2: Configure Pass to be the default keyring
+#### Option 2: Use KeePassXC for credential storage
+[KeePassXC](https://keepassxc.org/) is a modern, secure, and **cross-platform** password manager (Linux, macOS, Windows). This option uses KeePassXC's browser integration protocol for secure credential storage.
+
+**Works on all platforms** - provides an alternative to platform-specific credential stores.
+
+To configure KeePassXC as your credential storage:
+
+1. Install KeePassXC:
+   - **Linux**: `sudo apt-get install keepassxc` (or use your package manager)
+   - **macOS**: `brew install keepassxc`
+   - **Windows**: Download from https://keepassxc.org/download/
+
+2. Start KeePassXC and create/unlock a database
+
+3. Enable browser integration in KeePassXC:
+   - Go to **Tools** → **Settings** → **Browser Integration**
+   - Check **Enable browser integration**
+
+4. Configure `saml2aws` to use KeePassXC via environment variable:
+```bash
+export SAML2AWS_KEEPASSXC_ENABLED=true
+```
+
+   Add this to your shell profile (`.bashrc`, `.zshrc`, or PowerShell profile) to make it persistent.
+   
+   **Important:** KeePassXC can only be enabled via the `SAML2AWS_KEEPASSXC_ENABLED` environment variable. It is **not** configurable through the `.saml2aws` configuration file.
+
+5. Now when you run `saml2aws login` or `configure`, your credentials will be securely stored in your KeePassXC database. KeePassXC will prompt you to allow saml2aws access on first use.
+
+   **After first use**, saml2aws saves association credentials to `<config_file>_keepassxc` (default: `~/.saml2aws_keepassxc`) and will automatically use KeePassXC on subsequent runs without needing the environment variable set (unless explicitly set to `false`). The credentials file location follows your config file setting from `--config` or `SAML2AWS_CONFIGFILE`.
+
+**Note:** KeePassXC must be running with an unlocked database for this to work on all platforms.
+
+For more details, see the [KeePassXC helper documentation](helper/keepassxc/README.md).
+
+#### Option 3: Configure Pass to be the default keyring
 There are a few steps involved with this option - however this option will save your credentials (such as your password to your IDP, and session tokens etc) into the `pass`[https://www.passwordstore.org/] keyring. The `pass` keyring is the standard Unix password manager. This option was *heavily inspired* by a similar issue in [aws-vault](https://github.com/99designs/aws-vault/issues/683)
 
 To configure pass to be the default keyring the following steps will need to be completed (assuming you are using Ubuntu 20.04 LTS):
@@ -783,7 +819,16 @@ make build
 
 ## Environment vars
 
-The exec sub command will export the following environment variables.
+### Credential Helper Configuration
+
+These environment variables control credential storage (cannot be configured via `.saml2aws` file):
+
+* **SAML2AWS_KEEPASSXC_ENABLED** - Set to `true` or `1` to enable KeePassXC credential helper (cross-platform)
+* **SAML2AWS_KEYRING_BACKEND** - Set to `pass` to use the pass password manager on Linux (default: libsecret/kwallet)
+
+### Exported by exec sub command
+
+The exec sub command will export the following environment variables:
 
 * AWS_ACCESS_KEY_ID
 * AWS_SECRET_ACCESS_KEY
